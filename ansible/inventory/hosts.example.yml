@@ -1,0 +1,16 @@
+---
+# Shape of the inventory that `terraform apply` writes to inventory/hosts.yml.
+# Copy it by hand only if you provision the server some other way.
+all:
+  children:
+    app:
+      hosts:
+        zdi-staging-app-1:
+          ansible_host: 192.0.2.10 # documentation address (RFC 5737)
+          ansible_user: deploy
+          private_ip: 10.42.1.10
+  vars:
+    deploy_environment: staging
+    app_domain: ""
+    ssh_allowed_cidrs:
+      - "203.0.113.10/32"

@@ -1,0 +1,38 @@
+---
+- name: Install the SSH hardening drop-in
+  ansible.builtin.template:
+    src: sshd_hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload ssh
+
+- name: Remove the first-boot SSH drop-in written by cloud-init
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/00-bootstrap.conf
+    state: absent
+  notify: Reload ssh
+
+- name: Configure fail2ban for sshd
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    content: |
+      [sshd]
+      enabled = true
+      port = {{ common_ssh_port }}
+      backend = systemd
+      maxretry = 5
+      findtime = 10m
+      bantime = 1h
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Keep fail2ban running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

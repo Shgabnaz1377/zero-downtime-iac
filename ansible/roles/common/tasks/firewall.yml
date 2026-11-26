@@ -1,0 +1,47 @@
+---
+# Rules are added before the firewall is enabled so the current SSH session
+# is never cut off.
+- name: Allow SSH from trusted networks
+  community.general.ufw:
+    rule: allow
+    port: "{{ common_ssh_port | string }}"
+    proto: tcp
+    from_ip: "{{ item }}"
+    comment: ssh from trusted network
+  loop: "{{ common_ssh_allowed_cidrs }}"
+
+- name: Rate limit SSH from anywhere when no trusted networks are configured
+  community.general.ufw:
+    rule: limit
+    port: "{{ common_ssh_port | string }}"
+    proto: tcp
+    comment: ssh rate limited
+  when: common_ssh_allowed_cidrs | length == 0
+
+- name: Allow public web traffic
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: public web
+  loop: "{{ common_ufw_public_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+
+- name: Deny unsolicited inbound traffic by default
+  community.general.ufw:
+    direction: incoming
+    default: deny
+
+- name: Allow outbound traffic by default
+  community.general.ufw:
+    direction: outgoing
+    default: allow
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
+
+- name: Log blocked packets at a low rate
+  community.general.ufw:
+    logging: "low"

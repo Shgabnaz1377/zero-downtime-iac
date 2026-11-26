@@ -1,0 +1,20 @@
+// {{ ansible_managed }}
+Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}";
+        "${distro_id}:${distro_codename}-security";
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+};
+
+// Docker packages come from Docker's own repository and are upgraded on
+// purpose, together with a provisioning run, not in the background.
+Unattended-Upgrade::Package-Blacklist {
+        "docker-ce";
+        "docker-ce-cli";
+        "containerd.io";
+};
+
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if common_unattended_reboot else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ common_unattended_reboot_time }}";

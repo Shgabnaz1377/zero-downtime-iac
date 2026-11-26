@@ -1,0 +1,30 @@
+---
+- name: Create additional admin users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    groups: [sudo]
+    append: true
+    shell: /bin/bash
+    password: "!"
+    update_password: on_create
+  loop: "{{ common_admin_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Authorise SSH keys for additional admin users
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_keys | join('\n') }}"
+    exclusive: true
+  loop: "{{ common_admin_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Allow the sudo group to escalate without a password (key-only logins have none)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-sudo-group
+    content: "%sudo ALL=(ALL:ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s

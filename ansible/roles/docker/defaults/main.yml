@@ -1,0 +1,31 @@
+---
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+  # Used by the community.docker modules on the host.
+  - python3-docker
+  - python3-requests
+
+# Distribution packages that conflict with Docker's own.
+docker_conflicting_packages:
+  - docker.io
+  - docker-doc
+  - docker-compose
+  - docker-compose-v2
+  - podman-docker
+  - containerd
+  - runc
+
+docker_apt_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+
+docker_log_max_size: 10m
+docker_log_max_file: 3
+
+# Members of the docker group are effectively root on the host. Nobody is
+# added by default; Ansible uses sudo.
+docker_users: []

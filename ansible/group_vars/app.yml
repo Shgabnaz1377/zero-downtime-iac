@@ -1,0 +1,22 @@
+---
+# Release settings for the application servers.
+
+# Image to ship; the tag is passed per release (make deploy TAG=...).
+app_image_repository: ghcr.io/shgabnaz1377/zero-downtime-iac-app
+
+# Environment handed to every app container. APP_VERSION and APP_COLOR are
+# set by the role and override anything with the same name here.
+app_env:
+  LOG_LEVEL: info
+
+# Health gate before traffic moves: 20 tries x 3 s = 60 s for a cold start.
+app_health_retries: 20
+app_health_delay: 3
+
+# Time the old colour keeps running after the switch, so requests that were
+# already in flight can finish before it is stopped.
+app_drain_seconds: 10
+
+# Contact address for the ACME (Let's Encrypt) account; only used when
+# app_domain is set.
+app_acme_email: ""

@@ -1,0 +1,19 @@
+---
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Manage users
+  ansible.builtin.import_tasks: users.yml
+
+- name: Harden SSH
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Configure unattended upgrades
+  ansible.builtin.import_tasks: unattended_upgrades.yml
+
+- name: Configure the host firewall
+  ansible.builtin.import_tasks: firewall.yml

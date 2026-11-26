@@ -1,0 +1,28 @@
+---
+common_packages:
+  - acl
+  - ca-certificates
+  - curl
+  - fail2ban
+  - jq
+  - needrestart
+  - ufw
+  - unattended-upgrades
+
+# Additional login users: [{name: alice, ssh_keys: ["ssh-ed25519 ..."]}]
+common_admin_users: []
+
+# Networks allowed to reach SSH. Defaults to the list Terraform puts in the
+# inventory; when empty, SSH stays open but rate limited (the Hetzner cloud
+# firewall still applies in front of the host).
+common_ssh_allowed_cidrs: "{{ ssh_allowed_cidrs | default([]) }}"
+common_ssh_port: 22
+
+common_unattended_reboot: false
+common_unattended_reboot_time: "04:30"
+
+# Public ports opened in ufw in addition to SSH.
+common_ufw_public_ports:
+  - { port: "80", proto: tcp }
+  - { port: "443", proto: tcp }
+  - { port: "443", proto: udp }

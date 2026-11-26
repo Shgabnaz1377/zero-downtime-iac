@@ -1,0 +1,17 @@
+---
+# Settings shared by every host. Host-specific values (address, user,
+# ssh_allowed_cidrs, app_domain) come from the Terraform-generated inventory.
+
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# Extra people who may log in. The admin user created by cloud-init is always
+# kept; add entries here to grant teammates access.
+#   - name: alice
+#     ssh_keys:
+#       - "ssh-ed25519 AAAA... alice@laptop"
+common_admin_users: []
+
+# Reboot automatically when an unattended upgrade needs it. Off by default:
+# a single-VM setup has no second machine to take traffic during a reboot.
+common_unattended_reboot: false
+common_unattended_reboot_time: "04:30"

@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: common
+  namespace: zdi
+  author: Shabnaz Ghaffari
+  description: OS baseline - users, SSH hardening, unattended upgrades and ufw
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+  galaxy_tags:
+    - security
+    - hardening
+    - ufw
+
+dependencies: []

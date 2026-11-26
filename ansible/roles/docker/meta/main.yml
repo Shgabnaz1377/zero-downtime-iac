@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: docker
+  namespace: zdi
+  author: Shabnaz Ghaffari
+  description: Docker Engine and Compose plugin from Docker's official apt repository
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+  galaxy_tags:
+    - docker
+    - containers
+
+dependencies: []

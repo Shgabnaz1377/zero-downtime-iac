@@ -1,0 +1,10 @@
+---
+# Full provisioning of a fresh (or existing) server: OS baseline, Docker and
+# the reverse proxy. Safe to re-run; it does not touch the running release.
+- name: Provision application servers
+  hosts: app
+  become: true
+  roles:
+    - role: common
+    - role: docker
+    - role: app
