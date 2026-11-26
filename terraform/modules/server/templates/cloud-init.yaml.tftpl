@@ -1,0 +1,35 @@
+#cloud-config
+# First-boot bootstrap only: just enough for Ansible to take over.
+# Hardening, Docker and the app are managed by the Ansible roles so that they
+# can be reviewed and re-applied.
+
+package_update: true
+package_upgrade: true
+packages:
+  - python3
+  - python3-apt
+  - ca-certificates
+  - curl
+
+users:
+  - name: ${admin_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+disable_root: true
+ssh_pwauth: false
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-bootstrap.conf
+    permissions: "0644"
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+
+runcmd:
+  - systemctl reload ssh || systemctl reload sshd || true
