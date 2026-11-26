@@ -1,0 +1,13 @@
+---
+profile: production
+
+exclude_paths:
+  - .github/
+  - terraform/
+  - app/
+  - ansible/collections/
+
+# The inventory is rendered by Terraform; the example file documents its shape.
+kinds:
+  - playbook: "ansible/playbooks/*.yml"
+  - vars: "ansible/group_vars/**/*.yml"

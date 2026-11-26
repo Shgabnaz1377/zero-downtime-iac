@@ -1,0 +1,4 @@
+# Tooling used by `make lint` and the CI workflow.
+ansible-core==2.21.6
+ansible-lint==26.11.1
+yamllint==1.38.0
