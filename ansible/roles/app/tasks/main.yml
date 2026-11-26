@@ -1,0 +1,55 @@
+---
+# One-time (and re-runnable) host setup for blue/green releases. Releasing an
+# image is done by tasks_from: deploy / rollback.
+- name: Create the release state directory
+  ansible.builtin.file:
+    path: "{{ app_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the Caddy configuration directory
+  ansible.builtin.file:
+    path: "{{ app_caddy_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render the Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ app_caddy_dir }}/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload caddy
+
+# force: false - never overwrite the upstream a release has already switched.
+- name: Create the initial upstream (blue) if none exists yet
+  ansible.builtin.template:
+    src: upstream.caddy.j2
+    dest: "{{ app_caddy_dir }}/upstream.caddy"
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+  vars:
+    app_target_color: blue
+
+- name: Run Caddy on the host network
+  community.docker.docker_container:
+    name: "{{ app_caddy_container }}"
+    image: "{{ app_caddy_image }}"
+    state: started
+    restart_policy: unless-stopped
+    network_mode: host
+    volumes:
+      # The directory (not single files) is mounted so that rewritten files
+      # are visible inside the container without a restart.
+      - "{{ app_caddy_dir }}:/etc/caddy:ro"
+      - caddy_data:/data
+      - caddy_config:/config
+    labels:
+      com.github.zero-downtime-iac.role: proxy

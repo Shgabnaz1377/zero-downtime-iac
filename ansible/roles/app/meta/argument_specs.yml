@@ -1,0 +1,54 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare the host for blue/green releases (state directory and Caddy).
+    options:
+      app_name:
+        type: str
+        description: Prefix of the blue and green container names.
+      app_colors:
+        type: dict
+        description: Loopback host port for each colour.
+      app_domain:
+        type: str
+        description: Public DNS name; enables automatic HTTPS when set.
+      app_caddy_image:
+        type: str
+        description: Pinned Caddy image.
+      app_proxy_check_port:
+        type: int
+        description: Loopback-only Caddy port used for post-switch verification.
+
+  deploy:
+    short_description: Release an image tag to the idle colour and switch traffic to it.
+    options:
+      app_image_tag:
+        type: str
+        required: true
+        description: Tag of app_image_repository to release.
+      app_image_repository:
+        type: str
+        description: Image repository without tag.
+      app_env:
+        type: dict
+        description: Extra environment for the app container.
+      app_health_retries:
+        type: int
+        description: Health probe attempts before the release is aborted.
+      app_health_delay:
+        type: int
+        description: Seconds between health probe attempts.
+      app_drain_seconds:
+        type: int
+        description: Seconds the old colour keeps running after the switch.
+
+  rollback:
+    short_description: Switch traffic back to the colour kept from the previous release.
+    options:
+      app_drain_seconds:
+        type: int
+        description: Seconds the current colour keeps running after the switch.
+
+  status:
+    short_description: Report which colour is live and what each colour runs.
+    options: {}

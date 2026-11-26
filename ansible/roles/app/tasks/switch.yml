@@ -1,0 +1,33 @@
+---
+# Atomically repoint Caddy at app_target_color and prove it took effect.
+# `caddy reload` swaps the config in place: open connections finish on the
+# old upstream, new ones go to the new one, nothing is dropped.
+- name: Point the proxy upstream at {{ app_target_color }}
+  ansible.builtin.template:
+    src: upstream.caddy.j2
+    dest: "{{ app_caddy_dir }}/upstream.caddy"
+    owner: root
+    group: root
+    mode: "0644"
+  register: app_upstream_file
+
+# Reloaded even when the file is unchanged, so a previously failed reload can
+# never leave Caddy serving something other than what the file says.
+- name: Reload Caddy gracefully
+  community.docker.docker_container_exec:
+    container: "{{ app_caddy_container }}"
+    argv: [caddy, reload, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+  changed_when: app_upstream_file is changed
+
+- name: Verify through the proxy that traffic now reaches {{ app_target_color }}
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_proxy_check_port }}/version"
+    return_content: true
+    timeout: 5
+    status_code: [200, 502, 503]
+  register: app_proxy_probe
+  until: >-
+    app_proxy_probe.status == 200 and
+    (app_proxy_probe.json | default({})).color | default('') == app_target_color
+  retries: 10
+  delay: 1

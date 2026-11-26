@@ -1,0 +1,35 @@
+---
+- name: Load the current release state
+  ansible.builtin.import_tasks: state.yml
+
+- name: Inspect both colours
+  community.docker.docker_container_info:
+    name: "{{ app_name }}-{{ item }}"
+  loop: "{{ app_colors.keys() | list }}"
+  register: app_status_info
+
+- name: Ask the proxy what it is serving
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_proxy_check_port }}/version"
+    return_content: true
+    timeout: 5
+    status_code: [200, 502, 503]
+  register: app_status_probe
+
+- name: Summarise each colour
+  ansible.builtin.set_fact:
+    app_status_colors: >-
+      {{ app_status_colors | default({}) | combine({
+           item.item: (item.container.Config.Image ~ (' (running)' if item.container.State.Running else ' (stopped)'))
+                      if item.exists else 'absent'
+         }) }}
+  loop: "{{ app_status_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Report release status
+  ansible.builtin.debug:
+    msg:
+      live_color: "{{ app_active_color if app_active_color else 'none' }}"
+      proxy_serves: "{{ app_status_probe.json | default('no healthy upstream (HTTP ' ~ app_status_probe.status ~ ')') }}"
+      colors: "{{ app_status_colors }}"

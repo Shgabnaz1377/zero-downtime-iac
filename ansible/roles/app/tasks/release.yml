@@ -1,0 +1,122 @@
+---
+# The blue/green sequence. Traffic stays on app_active_color until the new
+# container on app_idle_color has passed its health gate.
+- name: Log in to the container registry
+  community.docker.docker_login:
+    registry_url: "{{ app_registry_url }}"
+    username: "{{ app_registry_username }}"
+    password: "{{ app_registry_password }}"
+  no_log: true
+  when: app_registry_username | length > 0
+
+- name: Pull the release image
+  community.docker.docker_image:
+    name: "{{ app_release_image }}"
+    source: pull
+    force_source: true
+
+- name: Start and health-check the idle colour
+  block:
+    - name: Start the new version on {{ app_idle_color }}
+      community.docker.docker_container:
+        name: "{{ app_name }}-{{ app_idle_color }}"
+        image: "{{ app_release_image }}"
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        published_ports:
+          - "127.0.0.1:{{ app_colors[app_idle_color] }}:{{ app_container_port }}"
+        env: "{{ app_env | combine({'APP_VERSION': app_image_tag, 'APP_COLOR': app_idle_color}) }}"
+        memory: "{{ app_memory_limit }}"
+        read_only: true
+        tmpfs:
+          - /tmp
+        cap_drop:
+          - ALL
+        security_opts:
+          - no-new-privileges:true
+        labels:
+          com.github.zero-downtime-iac.role: app
+          com.github.zero-downtime-iac.color: "{{ app_idle_color }}"
+          com.github.zero-downtime-iac.version: "{{ app_image_tag }}"
+
+    - name: Run the health gate
+      ansible.builtin.include_tasks: health.yml
+      vars:
+        app_check_color: "{{ app_idle_color }}"
+        app_expected_version: "{{ app_image_tag }}"
+
+  rescue:
+    - name: Collect the failed container's logs
+      ansible.builtin.command:
+        argv: [docker, logs, --tail, "50", "{{ app_name }}-{{ app_idle_color }}"]
+      register: app_failed_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Show the failed container's logs
+      ansible.builtin.debug:
+        msg: "{{ (app_failed_logs.stdout_lines | default([])) + (app_failed_logs.stderr_lines | default([])) }}"
+
+    - name: Remove the unhealthy container
+      community.docker.docker_container:
+        name: "{{ app_name }}-{{ app_idle_color }}"
+        state: absent
+
+    - name: Abort the release
+      ansible.builtin.fail:
+        msg: >-
+          {{ app_release_image }} failed its health check on {{ app_idle_color }}.
+          Traffic was never switched; {{ app_active_color if app_active_color else 'nothing' }} is still live.
+
+- name: Switch traffic to the new colour
+  block:
+    - name: Repoint the proxy
+      ansible.builtin.include_tasks: switch.yml
+      vars:
+        app_target_color: "{{ app_idle_color }}"
+
+  rescue:
+    - name: Put the proxy back on the previous colour
+      ansible.builtin.include_tasks: switch.yml
+      vars:
+        app_target_color: "{{ app_active_color }}"
+      when: app_active_color | length > 0
+
+    - name: Remove the container that could not take traffic
+      community.docker.docker_container:
+        name: "{{ app_name }}-{{ app_idle_color }}"
+        state: absent
+
+    - name: Abort the release after restoring the proxy
+      ansible.builtin.fail:
+        msg: >-
+          The proxy did not serve {{ app_idle_color }} after the switch and was
+          restored to {{ app_active_color if app_active_color else 'its previous state' }}.
+
+- name: Record the new live colour
+  ansible.builtin.copy:
+    dest: "{{ app_state_file }}"
+    content: "{{ app_idle_color }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Let in-flight requests on the old colour finish
+  ansible.builtin.pause:
+    seconds: "{{ app_drain_seconds }}"
+  when: app_active_color | length > 0 and app_drain_seconds | int > 0
+
+# Stopped, not removed: rollback.yml restarts it without pulling anything.
+- name: Stop the previous colour and keep it for rollback
+  community.docker.docker_container:
+    name: "{{ app_name }}-{{ app_active_color }}"
+    state: stopped
+  when: app_active_color | length > 0
+
+- name: Summarise the release
+  ansible.builtin.debug:
+    msg: >-
+      {{ app_release_image }} is live on {{ app_idle_color }}.
+      {{ ('Previous release kept stopped on ' ~ app_active_color ~ ' for rollback.')
+         if app_active_color else 'First release on this host.' }}

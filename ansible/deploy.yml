@@ -1,0 +1,17 @@
+---
+# Blue/green release of one image tag.
+#
+#   ansible-playbook deploy.yml -e app_image_tag=1.4.0
+#
+# Hosts are released one at a time so a failure stops the rollout before it
+# reaches the next server.
+- name: Release a new application version
+  hosts: app
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+  tasks:
+    - name: Run the blue/green release
+      ansible.builtin.include_role:
+        name: app
+        tasks_from: deploy

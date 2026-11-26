@@ -1,0 +1,39 @@
+---
+# Container names are "<app_name>-blue" and "<app_name>-green".
+app_name: zdi-app
+app_image_repository: ghcr.io/shgabnaz1377/zero-downtime-iac-app
+app_container_port: 8000
+
+# Each colour listens on its own loopback-only host port. Only Caddy, running
+# on the host network, can reach them.
+app_colors:
+  blue: 8001
+  green: 8002
+
+app_env: {}
+app_memory_limit: 256m
+
+app_health_path: /health
+app_health_retries: 20
+app_health_delay: 3
+app_drain_seconds: 10
+
+app_state_dir: /opt/zdi
+app_state_file: "{{ app_state_dir }}/active_color"
+app_caddy_dir: "{{ app_state_dir }}/caddy"
+
+# Reverse proxy. Pin the image so a provisioning run never upgrades it by
+# surprise; recreating the proxy container is the one step with a short blip.
+app_caddy_container: caddy
+app_caddy_image: caddy:2.8.4-alpine
+app_domain: ""
+app_acme_email: ""
+
+# Loopback-only Caddy listener used to verify a switch from the server
+# itself, independent of DNS and TLS.
+app_proxy_check_port: 8080
+
+# Optional private registry credentials (leave empty for public images).
+app_registry_url: ghcr.io
+app_registry_username: ""
+app_registry_password: ""

@@ -1,0 +1,13 @@
+---
+# Show which colour is live and which image each colour holds.
+#
+#   ansible-playbook status.yml
+- name: Report release status
+  hosts: app
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Show blue/green status
+      ansible.builtin.include_role:
+        name: app
+        tasks_from: status

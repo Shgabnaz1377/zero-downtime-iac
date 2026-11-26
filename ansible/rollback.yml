@@ -1,0 +1,15 @@
+---
+# Switch traffic back to the previous colour (the container kept stopped by
+# the last release). No image pull, so it takes seconds.
+#
+#   ansible-playbook rollback.yml
+- name: Roll back to the previous release
+  hosts: app
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+  tasks:
+    - name: Switch back to the previous colour
+      ansible.builtin.include_role:
+        name: app
+        tasks_from: rollback

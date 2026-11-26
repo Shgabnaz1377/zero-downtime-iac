@@ -1,0 +1,30 @@
+---
+# Health gate for one colour, probed directly on its loopback port (not
+# through the proxy). Expects app_check_color and, optionally,
+# app_expected_version.
+- name: Wait until the container answers its health check on {{ app_check_color }}
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_colors[app_check_color] }}{{ app_health_path }}"
+    status_code: 200
+    timeout: 5
+  register: app_health_probe
+  until: app_health_probe.status == 200
+  retries: "{{ app_health_retries }}"
+  delay: "{{ app_health_delay }}"
+
+- name: Ask the container which version and colour it is running on {{ app_check_color }}
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_colors[app_check_color] }}/version"
+    return_content: true
+    timeout: 5
+  register: app_version_probe
+
+- name: Confirm the container is the one we just started
+  ansible.builtin.assert:
+    that:
+      - app_version_probe.json.color == app_check_color
+      - app_expected_version is not defined or app_version_probe.json.version == app_expected_version
+    fail_msg: >-
+      Expected colour {{ app_check_color }}{{ (' version ' ~ app_expected_version) if app_expected_version is defined else '' }},
+      got {{ app_version_probe.json }}.
+    quiet: true

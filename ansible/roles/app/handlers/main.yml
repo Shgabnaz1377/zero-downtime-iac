@@ -1,0 +1,13 @@
+---
+# Graceful: Caddy applies the new config without dropping connections. A
+# failed reload leaves the previous config running.
+- name: Reload caddy
+  community.docker.docker_container_exec:
+    container: "{{ app_caddy_container }}"
+    argv: [caddy, reload, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+  register: app_caddy_reload
+  # On the very first run the container may have started a moment ago.
+  until: app_caddy_reload is succeeded
+  retries: 5
+  delay: 2
+  changed_when: true

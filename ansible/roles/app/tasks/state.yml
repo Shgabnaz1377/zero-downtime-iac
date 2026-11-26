@@ -1,0 +1,26 @@
+---
+# Sets app_active_color ('' before the first release) and app_idle_color.
+- name: Look for the recorded live colour
+  ansible.builtin.stat:
+    path: "{{ app_state_file }}"
+  register: app_state_stat
+
+- name: Read the recorded live colour
+  ansible.builtin.slurp:
+    src: "{{ app_state_file }}"
+  register: app_state_raw
+  when: app_state_stat.stat.exists
+
+- name: Work out the live and idle colours
+  ansible.builtin.set_fact:
+    app_active_color: "{{ (app_state_raw.content | b64decode | trim) if app_state_stat.stat.exists else '' }}"
+
+- name: Reject a corrupted state file
+  ansible.builtin.assert:
+    that: app_active_color in ['', 'blue', 'green']
+    fail_msg: "{{ app_state_file }} contains '{{ app_active_color }}'; expected blue or green."
+    quiet: true
+
+- name: Pick the idle colour
+  ansible.builtin.set_fact:
+    app_idle_color: "{{ 'green' if app_active_color == 'blue' else 'blue' }}"

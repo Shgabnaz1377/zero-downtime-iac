@@ -1,0 +1,87 @@
+---
+- name: Load the current release state
+  ansible.builtin.import_tasks: state.yml
+
+- name: Make sure there is a release to roll back from
+  ansible.builtin.assert:
+    that: app_active_color | length > 0
+    fail_msg: Nothing has been released on this host yet.
+    quiet: true
+
+- name: Inspect the previous release
+  community.docker.docker_container_info:
+    name: "{{ app_name }}-{{ app_idle_color }}"
+  register: app_previous_info
+
+- name: Make sure the previous release still exists
+  ansible.builtin.assert:
+    that: app_previous_info.exists
+    fail_msg: >-
+      No {{ app_idle_color }} container is kept on this host, so there is
+      nothing to roll back to. Deploy a known-good tag instead.
+    quiet: true
+
+- name: Start and health-check the previous release
+  block:
+    - name: Start the previous release on {{ app_idle_color }}
+      ansible.builtin.command:
+        argv: [docker, start, "{{ app_name }}-{{ app_idle_color }}"]
+      changed_when: not app_previous_info.container.State.Running
+
+    - name: Run the health gate
+      ansible.builtin.include_tasks: health.yml
+      vars:
+        app_check_color: "{{ app_idle_color }}"
+
+  rescue:
+    - name: Stop the previous release again
+      community.docker.docker_container:
+        name: "{{ app_name }}-{{ app_idle_color }}"
+        state: stopped
+
+    - name: Abort the rollback
+      ansible.builtin.fail:
+        msg: >-
+          The previous release on {{ app_idle_color }} did not become healthy.
+          Traffic is still on {{ app_active_color }}.
+
+- name: Switch traffic back
+  block:
+    - name: Repoint the proxy
+      ansible.builtin.include_tasks: switch.yml
+      vars:
+        app_target_color: "{{ app_idle_color }}"
+
+  rescue:
+    - name: Put the proxy back on the current colour
+      ansible.builtin.include_tasks: switch.yml
+      vars:
+        app_target_color: "{{ app_active_color }}"
+
+    - name: Abort the rollback after restoring the proxy
+      ansible.builtin.fail:
+        msg: The proxy did not serve {{ app_idle_color }}; it was restored to {{ app_active_color }}.
+
+- name: Record the new live colour
+  ansible.builtin.copy:
+    dest: "{{ app_state_file }}"
+    content: "{{ app_idle_color }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Let in-flight requests finish
+  ansible.builtin.pause:
+    seconds: "{{ app_drain_seconds }}"
+  when: app_drain_seconds | int > 0
+
+- name: Stop the release that was rolled back and keep it
+  community.docker.docker_container:
+    name: "{{ app_name }}-{{ app_active_color }}"
+    state: stopped
+
+- name: Summarise the rollback
+  ansible.builtin.debug:
+    msg: >-
+      Rolled back: {{ app_previous_info.container.Config.Image }} is live on {{ app_idle_color }}.
+      The release that was live is kept stopped on {{ app_active_color }}; run rollback again to return to it.

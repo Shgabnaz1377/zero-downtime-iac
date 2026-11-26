@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+{
+	admin localhost:2019
+{% if app_acme_email %}
+	email {{ app_acme_email }}
+{% endif %}
+{% if not app_domain %}
+	auto_https off
+{% endif %}
+}
+
+# Public site. With app_domain set, Caddy obtains a certificate and redirects
+# HTTP to HTTPS; without it the app is served on plain HTTP.
+{{ app_domain if app_domain else ':80' }} {
+	encode zstd gzip
+	header -Server
+	import /etc/caddy/upstream.caddy
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Loopback-only listener used by the deploy playbook to verify a switch
+# without depending on DNS or certificates.
+http://127.0.0.1:{{ app_proxy_check_port }} {
+	bind 127.0.0.1
+	import /etc/caddy/upstream.caddy
+}

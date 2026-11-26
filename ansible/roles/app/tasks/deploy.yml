@@ -1,0 +1,37 @@
+---
+- name: Validate the requested image tag
+  ansible.builtin.assert:
+    that: app_image_tag is match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+    fail_msg: "'{{ app_image_tag }}' is not a valid container image tag."
+    quiet: true
+
+- name: Load the current release state
+  ansible.builtin.import_tasks: state.yml
+
+- name: Remember the image being released
+  ansible.builtin.set_fact:
+    app_release_image: "{{ app_image_repository }}:{{ app_image_tag }}"
+
+- name: Inspect the live container
+  community.docker.docker_container_info:
+    name: "{{ app_name }}-{{ app_active_color }}"
+  register: app_live_info
+  when: app_active_color | length > 0
+
+# Re-running a deploy for the tag that is already live is a no-op, which keeps
+# the playbook idempotent and safe to retry.
+- name: Decide whether a release is needed
+  ansible.builtin.set_fact:
+    app_release_needed: >-
+      {{ not (app_live_info.exists | default(false)
+              and app_live_info.container.State.Running
+              and app_live_info.container.Config.Image == app_release_image) }}
+
+- name: Report that the requested version is already live
+  ansible.builtin.debug:
+    msg: "{{ app_release_image }} is already live on {{ app_active_color }}; nothing to do."
+  when: not app_release_needed | bool
+
+- name: Release to the idle colour
+  ansible.builtin.include_tasks: release.yml
+  when: app_release_needed | bool
