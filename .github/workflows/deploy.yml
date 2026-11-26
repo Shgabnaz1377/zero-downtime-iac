@@ -1,0 +1,128 @@
+---
+# Manual release from GitHub. It does nothing until the secrets below exist,
+# and it runs in the "production" environment so you can require a reviewer
+# under Settings -> Environments.
+#
+# Required secrets (environment or repository level):
+#   DEPLOY_HOST         public IPv4 of the server (terraform output server_ipv4)
+#   DEPLOY_SSH_KEY      private key whose public half is in terraform.tfvars
+#   DEPLOY_KNOWN_HOSTS  the server's host key line(s); collect them once with
+#                       `ssh-keyscan -t ed25519 <host>` and check the fingerprint
+# Optional:
+#   REGISTRY_USERNAME / REGISTRY_TOKEN   only for a private image
+#   vars.DEPLOY_USER    login name (default: deploy)
+#   vars.DEPLOY_RUNNER  runner label (default: ubuntu-24.04)
+#
+# Network: SSH is only open to ssh_allowed_cidrs (Hetzner firewall and ufw).
+# GitHub-hosted runners use wide, changing address ranges, so either use a
+# self-hosted runner inside an allowed network (set vars.DEPLOY_RUNNER) or
+# add the runner's egress range to ssh_allowed_cidrs knowingly.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: What to do
+        type: choice
+        options: [deploy, rollback, status]
+        default: deploy
+      image_tag:
+        description: Image tag to release (deploy only), e.g. 1.2.0 or sha-abc1234
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-24.04' }}
+    environment: production
+    timeout-minutes: 20
+    env:
+      OPERATION: ${{ inputs.operation }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check inputs and secrets
+        env:
+          HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+          HAS_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS != '' }}
+        run: |
+          missing=()
+          [ -n "$DEPLOY_HOST" ] || missing+=(DEPLOY_HOST)
+          [ "$HAS_KEY" = "true" ] || missing+=(DEPLOY_SSH_KEY)
+          [ "$HAS_KNOWN_HOSTS" = "true" ] || missing+=(DEPLOY_KNOWN_HOSTS)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]}. See the header of .github/workflows/deploy.yml."
+            exit 1
+          fi
+          if [ "$OPERATION" = "deploy" ] && ! [[ "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::A valid image_tag is required for deploy."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: |
+          pip install "$(grep '^ansible-core' requirements-lint.txt)"
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Write inventory
+        working-directory: ansible
+        run: |
+          cat > inventory/hosts.yml <<EOF
+          all:
+            children:
+              app:
+                hosts:
+                  app-1:
+                    ansible_host: "${DEPLOY_HOST}"
+                    ansible_user: "${DEPLOY_USER}"
+                    ansible_ssh_private_key_file: ~/.ssh/id_deploy
+          EOF
+
+      - name: Run playbook
+        working-directory: ansible
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          ANSIBLE_FORCE_COLOR: "1"
+        run: |
+          extra=()
+          if [ -n "$REGISTRY_USERNAME" ]; then
+            # Values are read from the environment inside Ansible, so the
+            # token never appears on a command line.
+            extra+=(-e '{"app_registry_username": "{{ lookup(\"env\", \"REGISTRY_USERNAME\") }}",
+                         "app_registry_password": "{{ lookup(\"env\", \"REGISTRY_TOKEN\") }}"}')
+          fi
+          case "$OPERATION" in
+            deploy)   ansible-playbook deploy.yml -e "app_image_tag=$IMAGE_TAG" "${extra[@]}" ;;
+            rollback) ansible-playbook rollback.yml ;;
+            status)   ansible-playbook status.yml ;;
+          esac
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
